@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InterviewOS</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; --teal: #72e0b2; --teal-dim: #246c59; --purple: #b0a4f0; --purple-dim: #534AB7; --coral: #f0997b; --coral-dim: #993c1d; --bg: #10151d; --surface: #19212d; --surface-2: #141c27; --border: #2b3a4d; --text: #eaf0f7; --text-dim: #aebdcd; --text-muted: #6b7d8f; }
+    * { box-sizing: border-box; margin: 0; }
+    body { min-height: 100vh; background: var(--bg); color: var(--text); }
+
+    /* Setup screen */
+    .setup { height: 100vh; display: grid; place-items: center; padding: 24px; }
+    .card { max-width: 500px; width: 100%; }
+    .brand { color: var(--teal); font-size: .85rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    h1 { font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -.04em; margin: 12px 0; }
+    p { color: var(--text-dim); line-height: 1.55; }
+    label { display: block; font-weight: 650; margin: 28px 0 8px; }
+    input { width: 100%; border: 1px solid #3b4c61; background: #111923; border-radius: 10px; color: inherit; padding: 14px; font: inherit; }
+    button { border: 0; border-radius: 10px; padding: 12px 16px; font: inherit; font-weight: 750; cursor: pointer; background: var(--teal); color: #082219; }
+    button:hover:not(:disabled) { filter: brightness(1.08); }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    .primary { width: 100%; margin-top: 16px; }
+    .error { min-height: 24px; margin-top: 12px; color: #ff9b9b; font-size: .92rem; }
+
+    /* Main app */
+    .app { display: none; height: 100vh; flex-direction: column; }
+    .app.active { display: flex; }
+
+    /* Top bar */
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 16px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .timer { font-size: .9rem; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .session-info { font-size: .85rem; color: var(--text-muted); }
+    .btn-end { background: transparent; border: 1px solid #e36c6c; color: #ffacac; padding: 8px 14px; font-size: .85rem; }
+    .btn-end .shortcut { color: #ff9b9b80; font-size: .75rem; margin-left: 4px; }
+
+    /* Lobby */
+    .lobby { flex: 1; display: grid; place-items: center; padding: 24px; }
+    .lobby .card { max-width: 420px; width: 100%; text-align: center; }
+    .lobby h2 { font-size: 1.4rem; margin-bottom: 6px; letter-spacing: -.02em; }
+    .lobby .subtitle { color: var(--text-dim); font-size: .88rem; margin-bottom: 24px; }
+    .lobby .upload-row { display: flex; gap: 8px; align-items: center; justify-content: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .lobby .upload-row input { max-width: 200px; padding: 8px; font-size: .85rem; }
+    .lobby .upload-row button { padding: 8px 14px; font-size: .85rem; }
+    .resume-status { color: var(--text-dim); font-size: .83rem; margin-bottom: 20px; min-height: 20px; }
+    .btn-voice-primary { width: 100%; padding: 16px; font-size: 1.05rem; margin-bottom: 10px; }
+    .btn-text-secondary { width: 100%; padding: 10px; font-size: .82rem; background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+
+    /* Split layout */
+    .split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; overflow: hidden; transition: grid-template-columns .3s ease; }
+    .split.chat-hidden { grid-template-columns: 1fr 0fr; }
+
+    /* LEFT: Meeting room */
+    .meeting { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
+    .participants { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 14px; justify-content: center; align-items: center; overflow-y: auto; }
+
+    .participant { width: 100%; max-width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; transition: all .3s ease; }
+    .participant.speaking { border-color: var(--teal); border-width: 2px; padding: 13px 15px; }
+    .participant.listening { opacity: .75; }
+    .participant.idle { opacity: .5; }
+    .participant .avatar { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; overflow: hidden; }
+    .participant .info { flex: 1; }
+    .participant .name { font-size: .95rem; font-weight: 600; }
+    .participant .role { font-size: .8rem; color: var(--text-dim); margin-top: 2px; }
+    .participant .status { font-size: .78rem; color: var(--text-muted); margin-top: 5px; display: flex; align-items: center; gap: 4px; }
+    .participant.speaking .status { color: var(--teal); }
+
+    .audio-waves { display: flex; gap: 2px; align-items: flex-end; height: 14px; }
+    .audio-waves span { width: 3px; background: var(--teal); border-radius: 1px; }
+    .wave-1 { animation: w1 .8s ease-in-out infinite; }
+    .wave-2 { animation: w2 .8s ease-in-out infinite; }
+    .wave-3 { animation: w3 .8s ease-in-out infinite; }
+    .wave-4 { animation: w1 .8s ease-in-out infinite .1s; }
+    .wave-5 { animation: w2 .8s ease-in-out infinite .2s; }
+    @keyframes w1 { 0%,100% { height: 4px; } 50% { height: 14px; } }
+    @keyframes w2 { 0%,100% { height: 8px; } 50% { height: 4px; } }
+    @keyframes w3 { 0%,100% { height: 12px; } 50% { height: 6px; } }
+
+    .thinking-dots { display: none; gap: 4px; align-items: center; }
+    .thinking-dots.active { display: flex; }
+    .thinking-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--teal); opacity: .4; animation: thinking 1.2s ease-in-out infinite; }
+    .thinking-dots span:nth-child(2) { animation-delay: .2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes thinking { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+
+    .think-timer { display: none; position: absolute; bottom: 0; left: 0; right: 0; background: var(--surface-2); border-top: 1px solid var(--border); padding: 8px 12px; align-items: center; justify-content: space-between; border-radius: 0 0 14px 14px; }
+    .think-timer.active { display: flex; }
+    .think-countdown { font-size: 1.1rem; font-weight: 700; color: var(--teal); font-variant-numeric: tabular-nums; }
+    .btn-ready { padding: 6px 14px; font-size: .82rem; background: var(--teal); color: #082219; border-radius: 8px; }
+
+    .live-transcription { padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2); flex-shrink: 0; }
+    .live-label { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+    .live-text { font-size: .85rem; color: var(--text-dim); font-style: italic; line-height: 1.45; min-height: 1.3em; }
+
+    .controls { padding: 10px 20px; border-top: 1px solid var(--border); display: flex; justify-content: center; gap: 12px; flex-shrink: 0; }
+    .ctrl-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); font-size: .85rem; position: relative; }
+    .ctrl-btn:hover { border-color: var(--text-muted); }
+    .ctrl-btn.danger { border-color: #e36c6c; color: #ffacac; }
+    .ctrl-btn .tooltip { display: none; position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); background: #222; color: var(--text-dim); font-size: .7rem; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+    .ctrl-btn:hover .tooltip { display: block; }
+
+    /* RIGHT: Transcript */
+    .transcript-panel { display: flex; flex-direction: column; overflow: hidden; transition: opacity .3s ease; }
+    .split.chat-hidden .transcript-panel { opacity: 0; pointer-events: none; overflow: hidden; }
+    .transcript-header { padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .transcript-header span { font-size: .88rem; font-weight: 600; }
+    .btn-toggle { background: transparent; border: 1px solid var(--border); color: var(--text-dim); padding: 5px 10px; font-size: .75rem; border-radius: 8px; }
+    .btn-toggle .shortcut { color: var(--text-muted); margin-left: 3px; }
+
+    .transcript-messages { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .msg { display: flex; gap: 10px; align-items: flex-start; }
+    .msg.msg-right { flex-direction: row-reverse; }
+    .msg-avatar { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 600; }
+    .msg-avatar.maya { background: #9FE1CB; color: #085041; }
+    .msg-avatar.raj { background: #CECBF6; color: #3C3489; }
+    .msg-avatar.candidate { background: #F5C4B3; color: #712B13; }
+    .msg-name { font-size: .78rem; font-weight: 600; margin-bottom: 2px; }
+    .msg-name.maya { color: var(--teal); }
+    .msg-name.raj { color: var(--purple); }
+    .msg-name.candidate { color: var(--coral); }
+    .msg-right .msg-name { text-align: right; }
+    .msg-bubble { font-size: .85rem; color: var(--text); line-height: 1.48; background: var(--surface); padding: 9px 12px; border-radius: 0 10px 10px 10px; white-space: pre-wrap; }
+    .msg-right .msg-bubble { background: #1a3a2e; border-radius: 10px 0 10px 10px; }
+    .msg-bubble.current { border-left: 2px solid var(--teal); }
+    .msg-notice { text-align: center; padding: 2px 0; }
+    .msg-notice span { font-size: .75rem; color: var(--text-muted); background: var(--surface); padding: 2px 10px; border-radius: 8px; }
+
+    .composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .composer input { flex: 1; padding: 10px 12px; font-size: .88rem; }
+    .composer button { padding: 10px 14px; font-size: .85rem; }
+
+    /* Show transcript button (when hidden) */
+    .btn-show-transcript { display: none; position: fixed; bottom: 20px; right: 20px; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); padding: 10px 16px; border-radius: 10px; font-size: .82rem; z-index: 10; }
+    .split.chat-hidden ~ .btn-show-transcript { display: block; }
+
+    /* Report card */
+    .report-card { background: #1e2a38; border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-top: 6px; }
+    .report-card h3 { margin: 0 0 14px; color: var(--teal); font-size: .9rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .report-overall { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .report-overall .score-big { font-size: 2.2rem; font-weight: 800; }
+    .report-overall .rec-badge { padding: 4px 10px; border-radius: 6px; font-size: .78rem; font-weight: 700; text-transform: uppercase; }
+    .report-overall .duration { font-size: .85rem; color: var(--text-dim); margin-left: auto; }
+    .report-competencies { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+    .comp-item { display: flex; justify-content: space-between; align-items: center; background: var(--surface-2); padding: 7px 11px; border-radius: 8px; }
+    .comp-item .comp-name { font-size: .82rem; color: var(--text-dim); text-transform: capitalize; }
+    .comp-item .comp-score { font-weight: 700; font-size: .9rem; }
+    .report-section { margin-bottom: 10px; }
+    .report-section h4 { margin: 0 0 5px; font-size: .85rem; color: var(--text); }
+    .report-section ul { margin: 0; padding-left: 16px; }
+    .report-section li { color: var(--text-dim); font-size: .82rem; line-height: 1.45; margin-bottom: 3px; }
+    .report-rationale { color: var(--text-dim); font-size: .82rem; line-height: 1.45; margin-top: 6px; font-style: italic; }
+    .score-low { color: #e36c6c; }
+    .score-mid { color: #e3c96c; }
+    .score-high { color: var(--teal); }
+
+    /* Interview-screen resume upload */
+    .interview-upload { display: flex; gap: 8px; align-items: center; padding: 8px 16px; flex-wrap: wrap; }
+    .interview-upload input[type="file"] { max-width: 180px; padding: 6px; font-size: .8rem; border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; color: var(--text-dim); }
+    .interview-upload button { padding: 6px 12px; font-size: .8rem; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); }
+    .interview-upload .resume-status { font-size: .78rem; }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 700px) {
+      .split { grid-template-columns: 1fr !important; }
+      .transcript-panel { display: none; }
+      .split.chat-hidden .transcript-panel { display: none; }
+      .btn-show-transcript { display: block !important; }
+      .lobby .upload-row { flex-wrap: wrap; }
+      .report-competencies { grid-template-columns: 1fr; }
+    }
+  </style>
+  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.22.0.js"></script>
+</head>
+<body>
+  <!-- Setup -->
+  <section id="setup" class="setup">
+    <div class="card">
+      <div class="brand">InterviewOS</div>
+      <h1>Meet Maya & Raj.</h1>
+      <p>Start an adaptive PM interview with two AI interviewers. Maya covers product sense, metrics, and prioritization. Raj follows up on execution and leadership.</p>
+      <form id="create-form">
+        <label for="identifier">Email or 10-digit phone number</label>
+        <input id="identifier" required autocomplete="email" placeholder="name@example.com or 9876543210">
+        <button class="primary" type="submit">Start private interview</button>
+        <div id="setup-error" class="error" role="alert"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Main app -->
+  <main id="app" class="app">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="brand">InterviewOS</span>
+        <span id="session-info" class="session-info">Session ready</span>
+      </div>
+      <div class="topbar-right">
+        <span id="timer" class="timer hidden">00:00</span>
+        <button id="end-button" class="btn-end" disabled title="End session (Ctrl+E)">End session<span class="shortcut">^E</span></button>
+      </div>
+    </header>
+
+    <!-- Lobby -->
+    <section id="lobby" class="lobby">
+      <div class="card">
+        <h2>Get ready for your interview</h2>
+        <p class="subtitle">Upload your resume (optional), then start when you're ready.</p>
+        <div class="upload-row">
+          <input id="resume-file" type="file" accept=".pdf,.txt,application/pdf,text/plain">
+          <button id="upload-button" type="button">Upload resume</button>
+        </div>
+        <span id="resume-status" class="resume-status"></span>
+        <button id="start-voice-button" class="btn-voice-primary" type="button">Start voice interview</button>
+        <button id="start-button" class="btn-text-secondary" type="button">Start text interview</button>
+      </div>
+    </section>
+
+    <!-- Split layout (hidden until interview starts) -->
+    <div id="split" class="split hidden">
+      <!-- Left: Meeting room -->
+      <div class="meeting">
+        <div class="participants">
+          <!-- Maya -->
+          <div id="p-maya" class="participant idle">
+            <div class="avatar">
+              <svg viewBox="0 0 52 52" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="26" cy="26" r="26" fill="#1D9E75"/>
+                <circle cx="26" cy="18" r="8.5" fill="#E1F5EE"/>
+                <ellipse cx="26" cy="43" rx="15" ry="13" fill="#E1F5EE"/>
+                <circle cx="22.5" cy="17" r="1.4" fill="#0F6E56"/>
+                <circle cx="29.5" cy="17" r="1.4" fill="#0F6E56"/>
+                <path d="M23 22 Q26 25 29 22" stroke="#0F6E56" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="info">
+              <div class="name">Maya</div>
+              <div class="role">Senior PM interviewer</div>
+              <div class="status" id="maya-status">Waiting to start</div>
+            </div>
+            <div class="audio-waves hidden" id="maya-waves">
+              <span class="wave-1"></span><span class="wave-2"></span><span class="wave-3"></span><span class="wave-4"></span><span class="wave-5"></span>
+            </div>
+            <div class="thinking-dots" id="maya-thinking"><span></span><span></span><span></span></div>
+          </div>
+
+          <!-- Raj -->
+          <div id="p-raj" class="participant idle">
+            <div class="avatar">
+              <svg viewBox="0 0 52 52" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="26" cy="26" r="26" fill="#534AB7"/>
+                <circle cx="26" cy="18" r="8.5" fill="#EEEDFE"/>
+                <ellipse cx="26" cy="43" rx="15" ry="13" fill="#EEEDFE"/>
+                <circle cx="22.5" cy="17" r="1.4" fill="#3C3489"/>
+                <circle cx="29.5" cy="17" r="1.4" fill="#3C3489"/>
+                <path d="M23.5 22 L28.5 22" stroke="#3C3489" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="info">
+              <div class="name">Raj</div>
+              <div class="role">Hiring manager</div>
+              <div class="status" id="raj-status">Joins later</div>
+            </div>
+            <div class="audio-waves hidden" id="raj-waves">
+              <span class="wave-1"></span><span class="wave-2"></span><span class="wave-3"></span><span class="wave-4"></span><span class="wave-5"></span>
+            </div>
+            <div class="thinking-dots" id="raj-thinking"><span></span><span></span><span></span></div>
+          </div>
+
+          <!-- Candidate -->
+          <div id="p-candidate" class="participant idle" style="position:relative">
+            <div class="avatar">
+              <svg viewBox="0 0 52 52" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="26" cy="26" r="26" fill="#D85A30"/>
+                <circle cx="26" cy="18" r="8.5" fill="#FAECE7"/>
+                <ellipse cx="26" cy="43" rx="15" ry="13" fill="#FAECE7"/>
+                <circle cx="22.5" cy="17" r="1.4" fill="#712B13"/>
+                <circle cx="29.5" cy="17" r="1.4" fill="#712B13"/>
+                <path d="M23 22 Q26 24 29 22" stroke="#712B13" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="info">
+              <div class="name" id="candidate-name">You</div>
+              <div class="role">Candidate</div>
+              <div class="status" id="candidate-status">Waiting to start</div>
+            </div>
+            <div class="audio-waves hidden" id="candidate-waves">
+              <span class="wave-1"></span><span class="wave-2"></span><span class="wave-3"></span><span class="wave-4"></span><span class="wave-5"></span>
+            </div>
+            <div class="thinking-dots" id="candidate-thinking"><span></span><span></span><span></span></div>
+            <div class="think-timer" id="think-timer">
+              <div class="think-countdown" id="think-countdown">2:00</div>
+              <button id="ready-button" class="btn-ready" type="button">Ready to answer</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resume upload (available during interview) -->
+        <div id="interview-upload" class="interview-upload">
+          <input id="interview-resume-file" type="file" accept=".pdf,.txt,application/pdf,text/plain">
+          <button id="interview-upload-button" type="button">Attach resume</button>
+          <span id="interview-resume-status" class="resume-status"></span>
+        </div>
+
+        <!-- Live transcription -->
+        <div id="live-transcription" class="live-transcription hidden">
+          <div class="live-label">Live transcription</div>
+          <div id="live-text" class="live-text"></div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="controls hidden">
+          <button id="mute-button" class="ctrl-btn" title="Toggle mute (Ctrl+M)">
+            <span>&#x1f3a4;</span>
+            <span class="tooltip">Mute ^M</span>
+          </button>
+          <button id="end-call-button" class="ctrl-btn danger" title="End session (Ctrl+E)">
+            <span>&#x1f4de;</span>
+            <span class="tooltip">End ^E</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: Transcript -->
+      <div class="transcript-panel">
+        <div class="transcript-header">
+          <span>Transcript</span>
+          <button id="hide-chat-btn" class="btn-toggle" title="Hide transcript (Ctrl+H)">Hide<span class="shortcut"> ^H</span></button>
+        </div>
+        <div id="messages" class="transcript-messages"></div>
+        <form id="answer-form" class="composer">
+          <input id="answer" disabled autocomplete="off" placeholder="Type a message (voice is primary)">
+          <button id="send-button" disabled type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Show transcript button (when hidden) -->
+    <button id="show-chat-btn" class="btn-show-transcript hidden" title="Show transcript (Ctrl+H)">Show transcript ^H</button>
+  </main>
+
+  <script>
+    let sessionId = null;
+    let interviewStarted = false;
+    let sessionOpen = false;
+    let timerInterval = null;
+    let timerSeconds = 0;
+    let currentPersona = 'maya';
+    let candidateInitial = 'Y';
+
+    const setup = document.getElementById('setup');
+    const app = document.getElementById('app');
+    const lobby = document.getElementById('lobby');
+    const split = document.getElementById('split');
+    const messages = document.getElementById('messages');
+    const answerInput = document.getElementById('answer');
+    const sendButton = document.getElementById('send-button');
+    const startButton = document.getElementById('start-button');
+    const endButton = document.getElementById('end-button');
+    const uploadButton = document.getElementById('upload-button');
+    const resumeFile = document.getElementById('resume-file');
+    const resumeStatus = document.getElementById('resume-status');
+    const sessionInfo = document.getElementById('session-info');
+    const timerEl = document.getElementById('timer');
+    const liveTranscription = document.getElementById('live-transcription');
+    const liveText = document.getElementById('live-text');
+    const controls = document.getElementById('controls');
+    const hideChatBtn = document.getElementById('hide-chat-btn');
+    const showChatBtn = document.getElementById('show-chat-btn');
+
+    function scoreClass(s) { return s >= 4 ? 'score-high' : s >= 3 ? 'score-mid' : 'score-low'; }
+    function recBadgeStyle(r) { return `background:${{hire:'#246c59',lean_hire:'#2a5a3a',lean_no_hire:'#5a4a2a',no_hire:'#5a2a2a'}[r]||'#333'}`; }
+    function fmtDuration(secs) { const m = Math.floor(secs/60), s = secs%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+    function fmtDurationLong(secs) { const m = Math.floor(secs/60), s = secs%60; return m > 0 ? `${m}m ${s}s` : `${s}s`; }
+
+    function showInterviewScreen() {
+      lobby.classList.add('hidden');
+      split.classList.remove('hidden');
+      if (resumeFile.disabled) {
+        document.getElementById('interview-upload').classList.add('hidden');
+      }
+    }
+
+    function startTimer() {
+      timerSeconds = 0;
+      timerEl.classList.remove('hidden');
+      timerEl.textContent = '00:00';
+      timerInterval = setInterval(() => { timerSeconds++; timerEl.textContent = fmtDuration(timerSeconds); }, 1000);
+    }
+    function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
+
+    function setPersonaSpeaking(persona) {
+      ['maya','raj','candidate'].forEach(p => {
+        const el = document.getElementById('p-' + p);
+        const waves = document.getElementById(p + '-waves');
+        el.classList.remove('speaking', 'listening');
+        if (p === persona) {
+          el.classList.remove('idle');
+          el.classList.add('speaking');
+          waves.classList.remove('hidden');
+        } else if (p === 'raj' && !interviewStarted) {
+          el.classList.add('idle');
+          waves.classList.add('hidden');
+        } else {
+          el.classList.remove('idle');
+          el.classList.add('listening');
+          waves.classList.add('hidden');
+        }
+      });
+    }
+
+    function setAllIdle() {
+      ['maya','raj','candidate'].forEach(p => {
+        document.getElementById('p-' + p).classList.remove('speaking', 'listening');
+        document.getElementById(p + '-waves').classList.add('hidden');
+      });
+    }
+
+    function updateParticipantStatus(persona, status) {
+      const el = document.getElementById(persona + '-status');
+      if (el) el.textContent = status;
+    }
+
+    function addMessage(text, role, persona) {
+      const div = document.createElement('div');
+      if (role === 'notice') {
+        div.className = 'msg-notice';
+        div.innerHTML = `<span>${text}</span>`;
+      } else {
+        div.className = role === 'user' ? 'msg msg-right' : 'msg';
+        let avatarClass, nameClass, nameText, initial;
+        if (role === 'assistant') {
+          const p = persona || currentPersona;
+          avatarClass = p === 'raj' ? 'raj' : 'maya';
+          nameClass = avatarClass;
+          nameText = p === 'raj' ? 'Raj' : 'Maya';
+          initial = p === 'raj' ? 'R' : 'M';
+        } else {
+          avatarClass = 'candidate';
+          nameClass = 'candidate';
+          nameText = document.getElementById('candidate-name').textContent;
+          initial = candidateInitial;
+        }
+        div.innerHTML = `<div class="msg-avatar ${avatarClass}">${initial}</div><div><div class="msg-name ${nameClass}">${nameText}</div><div class="msg-bubble">${escapeHtml(text)}</div></div>`;
+      }
+      messages.append(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+    function renderReport(report) {
+      const card = document.createElement('div');
+      card.className = 'report-card';
+      const compHtml = Object.entries(report.competency_scores || {}).map(([n,d]) => {
+        const s = typeof d === 'object' ? d.score : d;
+        return `<div class="comp-item"><span class="comp-name">${n.replace(/_/g,' ')}</span><span class="comp-score ${scoreClass(s)}">${s}/5</span></div>`;
+      }).join('');
+      const dur = report.interview_duration_seconds ? fmtDurationLong(report.interview_duration_seconds) : fmtDurationLong(timerSeconds);
+      const rec = (report.recommendation||'').replace(/_/g,' ');
+      card.innerHTML = `
+        <h3>Interview feedback report</h3>
+        <div class="report-overall">
+          <span class="score-big ${scoreClass(report.overall_score)}">${report.overall_score}/5</span>
+          <span class="rec-badge" style="${recBadgeStyle(report.recommendation)}">${rec}</span>
+          <span class="duration">Duration: ${dur}</span>
+        </div>
+        <div class="report-competencies">${compHtml}</div>
+        <div class="report-section"><h4>Strengths</h4><ul>${(report.strengths||[]).map(s=>`<li>${s}</li>`).join('')}</ul></div>
+        <div class="report-section"><h4>Areas for improvement</h4><ul>${(report.areas_for_improvement||[]).map(s=>`<li>${s}</li>`).join('')}</ul></div>
+        ${report.recommendation_rationale ? `<div class="report-rationale">${report.recommendation_rationale}</div>` : ''}
+      `;
+      messages.append(card);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function setInterviewActive(active) {
+      interviewStarted = active;
+      answerInput.disabled = !active;
+      sendButton.disabled = !active;
+      startButton.disabled = active || !sessionOpen;
+      endButton.disabled = !sessionOpen;
+      uploadButton.disabled = !sessionOpen;
+      resumeFile.disabled = !sessionOpen;
+      sessionInfo.textContent = active ? 'Interview in progress' : sessionOpen ? 'Session ready' : 'Session ended';
+      if (active) {
+        updateParticipantStatus('maya', 'Leading interview');
+        updateParticipantStatus('candidate', 'Listening');
+        document.getElementById('p-maya').classList.remove('idle');
+        document.getElementById('p-candidate').classList.remove('idle');
+      }
+    }
+
+    async function api(path, options = {}) {
+      const r = await fetch(path, options);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || 'Something went wrong.');
+      return d;
+    }
+
+    // Create session
+    document.getElementById('create-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      document.getElementById('setup-error').textContent = '';
+      const id = document.getElementById('identifier').value.trim();
+      try {
+        const d = await api('/sessions', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({identifier:id}) });
+        sessionId = d.session_id;
+        sessionOpen = true;
+        setup.style.display = 'none';
+        app.classList.add('active');
+        addMessage('Session ready. Upload a resume or start the interview.', 'notice');
+        setInterviewActive(false);
+      } catch (err) { document.getElementById('setup-error').textContent = err.message; }
+    });
+
+    // Upload resume
+    uploadButton.addEventListener('click', async () => {
+      const file = resumeFile.files[0];
+      if (!file) { resumeStatus.textContent = 'Choose a PDF or TXT file first.'; return; }
+      uploadButton.disabled = true;
+      resumeStatus.textContent = 'Uploading...';
+      try {
+        const fd = new FormData(); fd.append('file', file);
+        const d = await api(`/sessions/${sessionId}/upload-resume`, {method:'POST', body:fd});
+        resumeStatus.textContent = `Resume uploaded (${d.characters_extracted} chars)`;
+        uploadButton.disabled = true;
+        resumeFile.disabled = true;
+        if (d.maya_response) addMessage(d.maya_response, 'assistant', 'maya');
+      } catch (err) { resumeStatus.textContent = err.message; uploadButton.disabled = !sessionOpen; }
+    });
+
+    // Interview-screen resume upload
+    const intUploadBtn = document.getElementById('interview-upload-button');
+    const intResumeFile = document.getElementById('interview-resume-file');
+    const intResumeStatus = document.getElementById('interview-resume-status');
+    intUploadBtn.addEventListener('click', async () => {
+      const file = intResumeFile.files[0];
+      if (!file) { intResumeStatus.textContent = 'Choose a PDF or TXT file first.'; return; }
+      intUploadBtn.disabled = true;
+      intResumeStatus.textContent = 'Uploading...';
+      try {
+        const fd = new FormData(); fd.append('file', file);
+        const d = await api(`/sessions/${sessionId}/upload-resume`, {method:'POST', body:fd});
+        intResumeStatus.textContent = `Resume attached (${d.characters_extracted} chars)`;
+        intUploadBtn.disabled = true;
+        intResumeFile.disabled = true;
+      } catch (err) { intResumeStatus.textContent = err.message; intUploadBtn.disabled = false; }
+    });
+
+    // Start text interview
+    startButton.addEventListener('click', async () => {
+      startButton.disabled = true;
+      document.getElementById('start-voice-button').disabled = true;
+      sessionInfo.textContent = 'Maya is preparing...';
+      try {
+        const d = await api(`/sessions/${sessionId}/start-interview`, {method:'POST'});
+        addMessage(d.question, 'assistant', 'maya');
+        setInterviewActive(true);
+        startTimer();
+        setPersonaSpeaking('maya');
+        updateParticipantStatus('maya', 'Speaking');
+        showInterviewScreen();
+        answerInput.focus();
+        setTimeout(() => { setAllIdle(); updateParticipantStatus('maya', 'Leading interview'); }, 3000);
+      } catch (err) { addMessage(err.message, 'notice'); setInterviewActive(false); }
+    });
+
+    // Send answer (text mode)
+    document.getElementById('answer-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const answer = answerInput.value.trim();
+      if (!answer || !interviewStarted) return;
+      answerInput.value = '';
+      addMessage(answer, 'user');
+      answerInput.disabled = true; sendButton.disabled = true;
+      setPersonaSpeaking('candidate');
+      updateParticipantStatus('candidate', 'Responded');
+      try {
+        setAllIdle();
+        sessionInfo.textContent = `${currentPersona === 'raj' ? 'Raj' : 'Maya'} is thinking...`;
+        const d = await api(`/sessions/${sessionId}/answer`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({answer})});
+        if (d.persona) {
+          currentPersona = d.persona;
+          if (d.persona === 'raj') {
+            updateParticipantStatus('raj', 'Leading interview');
+            updateParticipantStatus('maya', 'Listening');
+            document.getElementById('p-raj').classList.remove('idle');
+          }
+        }
+        if (d.action) addMessage(`[${d.action.replace('_',' ')}]`, 'notice');
+        addMessage(d.next_question, 'assistant', d.persona);
+        setPersonaSpeaking(d.persona || currentPersona);
+        updateParticipantStatus(d.persona || currentPersona, 'Speaking');
+        sessionInfo.textContent = 'Interview in progress';
+        if (d.interview_ended) {
+          sessionOpen = false;
+          setInterviewActive(false);
+          stopTimer();
+          setAllIdle();
+          sessionInfo.textContent = 'Interview completed';
+          if (d.feedback_report) renderReport(d.feedback_report);
+        } else {
+          answerInput.disabled = false; sendButton.disabled = false; answerInput.focus();
+          setTimeout(() => { setAllIdle(); updateParticipantStatus(d.persona || currentPersona, 'Leading interview'); }, 3000);
+        }
+      } catch (err) { addMessage(err.message, 'notice'); answerInput.disabled = false; sendButton.disabled = false; setAllIdle(); }
+    });
+
+    // End session
+    endButton.addEventListener('click', async () => {
+      if (!sessionOpen) return;
+      endButton.disabled = true;
+      try {
+        if (typeof stopVoiceInterview === 'function' && voiceMode) await stopVoiceInterview(true);
+        else await api(`/sessions/${sessionId}`, {method:'DELETE'});
+        sessionOpen = false;
+        setInterviewActive(false);
+        stopTimer();
+        setAllIdle();
+        addMessage('Session ended. Your data was cleared.', 'notice');
+      } catch (err) { addMessage(err.message, 'notice'); endButton.disabled = false; }
+    });
+
+    // Toggle chat panel
+    function toggleChat() {
+      split.classList.toggle('chat-hidden');
+      showChatBtn.classList.toggle('hidden', !split.classList.contains('chat-hidden'));
+    }
+    hideChatBtn.addEventListener('click', toggleChat);
+    showChatBtn.addEventListener('click', toggleChat);
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === 'm') { e.preventDefault(); if (typeof toggleMute === 'function') toggleMute(); }
+      if (ctrl && e.key === 'e') { e.preventDefault(); endButton.click(); }
+      if (ctrl && e.key === 'h') { e.preventDefault(); toggleChat(); }
+    });
+  </script>
+  <script src="/static/voice.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+groq
+python-dotenv
+pypdf
+python-multipart
+httpx
+agora-token-builder
