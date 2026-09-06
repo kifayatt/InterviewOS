@@ -316,12 +316,10 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
         session.interview_phase = "intro"
         return _sse_response(response)
 
-    # --- Evidence extraction + orchestration in parallel ---
+    # --- Evidence extraction then orchestration (sequential to avoid rate limits) ---
     try:
-        _, decision = await asyncio.gather(
-            extract_evidence_async(session, transcript),
-            decide_next_action_async(session),
-        )
+        await extract_evidence_async(session, transcript)
+        decision = await decide_next_action_async(session)
     except Exception as e:
         print(f"[LLM CALLBACK ERROR] Evidence/orchestration failed: {e}")
         fallback = "Could you tell me more about that?"

@@ -33,7 +33,7 @@ async_client = AsyncGroq(api_key=api_key)
 
 async def _llm_call(messages: list, temperature: float = 0.3) -> str:
     """Async LLM call with 8s timeout and retry on rate-limit."""
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             response = await asyncio.wait_for(
                 async_client.chat.completions.create(
@@ -44,7 +44,7 @@ async def _llm_call(messages: list, temperature: float = 0.3) -> str:
             return (response.choices[0].message.content or "").strip()
         except RateLimitError:
             if attempt < 2:
-                await asyncio.sleep(1.0 * (attempt + 1))
+                await asyncio.sleep(3.0 * (attempt + 1))
         except Exception as e:
             print(f"[LLM CALL ERROR] {type(e).__name__}: {e}")
             break
