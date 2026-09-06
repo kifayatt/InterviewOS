@@ -1,5 +1,3 @@
-import random
-
 from fastapi import APIRouter, HTTPException
 
 from agora_config import (
@@ -13,19 +11,6 @@ from agora_agent import start_agent, stop_agent
 
 voice_router = APIRouter(prefix="/voice")
 
-_GREETINGS = [
-    "Hi! I'm Maya, a Senior Product Manager here, and Raj will hop in shortly. How are you doing today?",
-    "Hey there! I'm Maya -- I lead product here. Raj, our hiring manager, will join us a bit later. How's your day going?",
-    "Hi! Maya here, Senior PM. Raj will be joining shortly. Before we dive in, how are you doing?",
-    "Hey! I'm Maya, a Senior PM on the team. Raj will pop in later. How are things on your end?",
-]
-
-_GREETINGS_WITH_NAME = [
-    "Hi {name}! I'm Maya, a Senior Product Manager here, and Raj will hop in shortly. How are you doing today?",
-    "Hey {name}! I'm Maya -- I lead product here. Raj, our hiring manager, will join us a bit later. How's your day going?",
-    "Hi {name}! Maya here, Senior PM. Raj will be joining shortly. Before we dive in, how are you doing?",
-    "Hey {name}! I'm Maya, a Senior PM on the team. Raj will pop in later. How are things on your end?",
-]
 
 
 @voice_router.post("/sessions/{session_id}/start")
@@ -61,7 +46,7 @@ async def start_voice_interview(session_id: str):
     session.current_persona = "maya"
     session.turn_count = 0
     session.evidence_map = empty_evidence_map()
-    session.interview_phase = "intro"
+    session.interview_phase = "greeting"
     session.maya_cameo_used = False
     session.raj_cameo_used = False
     session.cameo_active = False
@@ -71,16 +56,18 @@ async def start_voice_interview(session_id: str):
     vs = VoiceSessionState(session_id=session_id, channel_name=channel_name)
     voice_sessions[session_id] = vs
 
-    # Build Maya's system prompt and generate a varied greeting
+    # Build Maya's system prompt and greeting with audio check
     has_resume = bool(session.resume_text)
     maya_prompt = build_maya_prompt(session.resume_text, has_resume, scenario=build_scenario(session))
 
-    if session.candidate_name:
-        greeting_text = random.choice(_GREETINGS_WITH_NAME).format(name=session.candidate_name)
-    else:
-        greeting_text = random.choice(_GREETINGS)
+    name_part = f" {session.candidate_name}" if session.candidate_name else ""
+    greeting_text = (
+        f"Hi{name_part}! I'm Maya, a Senior PM here. "
+        "Raj, our hiring manager, will join us a bit later. "
+        "Before we begin — can you hear me okay?"
+    )
 
-    kickoff = "Start the interview. Greet the candidate, introduce yourself and mention Raj."
+    kickoff = "Start the interview. Greet the candidate and confirm audio."
 
     session.conversation_history = [
         {"role": "system", "content": maya_prompt},

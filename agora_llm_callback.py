@@ -137,23 +137,19 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
     if not transcript:
         if not session.conversation_history:
             has_resume = bool(session.resume_text)
-            name_part = f"Address the candidate by name — their name is {session.candidate_name}. " if session.candidate_name else ""
-            kickoff = (
-                f"Start the interview. {name_part}"
-                "Greet the candidate, introduce yourself and mention Raj. "
-                "You may ask how they're doing, or ask them to introduce themselves and share "
-                "a key achievement — pick one or two, not all. Vary your wording. "
-                "Stay professional and candidate-focused. No hypothetical or creative questions."
+            name_part = f" {session.candidate_name}" if session.candidate_name else ""
+            greeting = (
+                f"Hi{name_part}! I'm Maya, a Senior PM here. "
+                "Raj, our hiring manager, will join us a bit later. "
+                "Before we begin — can you hear me okay?"
             )
+            kickoff = "Start the interview. Greet the candidate and confirm audio."
             session.conversation_history = [
                 {"role": "system", "content": build_maya_prompt(session.resume_text, has_resume, scenario=build_scenario(session))},
                 {"role": "user", "content": kickoff},
+                {"role": "assistant", "content": greeting},
             ]
-            raw = await _llm_call(session.conversation_history, temperature=0.7)
-            greeting = clean_interviewer_text(raw)
-            if not greeting:
-                greeting = "Hi! I'm Maya. How are you doing today?"
-            session.conversation_history.append({"role": "assistant", "content": greeting})
+            session.interview_phase = "greeting"
             return _sse_response(greeting)
 
         # Raj just started after a handoff — generate his opening
@@ -305,6 +301,16 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
 
         asyncio.create_task(swap_back_from_cameo(session_id, prompt))
         return _sse_response(take_back)
+
+    # --- Greeting phase: natural response before orchestrator kicks in ---
+    if session.interview_phase == "greeting":
+        raw = await _llm_call(session.conversation_history, temperature=0.7)
+        response = clean_interviewer_text(raw)
+        if not response:
+            response = "Great, glad we're connected! So, tell me a bit about yourself."
+        session.conversation_history.append({"role": "assistant", "content": response})
+        session.interview_phase = "intro"
+        return _sse_response(response)
 
     # --- Evidence extraction + orchestration in parallel ---
     try:
