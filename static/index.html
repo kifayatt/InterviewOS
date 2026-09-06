@@ -470,6 +470,10 @@
       card.className = 'report-card';
       const compHtml = Object.entries(report.competency_scores || {}).map(([n,d]) => {
         const s = typeof d === 'object' ? d.score : d;
+        if (s === null || s === undefined) {
+          const summary = (typeof d === 'object' && d.summary) ? d.summary : 'Not covered';
+          return `<div class="comp-item"><span class="comp-name">${n.replace(/_/g,' ')}</span><span class="comp-score" style="color:var(--text-dim);font-style:italic">Not covered</span></div>`;
+        }
         return `<div class="comp-item"><span class="comp-name">${n.replace(/_/g,' ')}</span><span class="comp-score ${scoreClass(s)}">${s}/5</span></div>`;
       }).join('');
       const dur = report.interview_duration_seconds ? fmtDurationLong(report.interview_duration_seconds) : fmtDurationLong(timerSeconds);

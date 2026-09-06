@@ -931,7 +931,18 @@ Return ONLY valid JSON:
   "recommendation_rationale": "2-3 sentences explaining the recommendation"
 }
 
-Scoring rubric:
+IMPORTANT — Not Covered areas:
+Check "Questions per area" in the input. If an area has 0 questions asked, that competency
+was NOT covered during the interview. For uncovered areas:
+- Set score to null (not a low number)
+- Set summary to "Not covered — no questions were asked in this area during the interview."
+Do NOT penalize the candidate or give low scores for areas that were simply not reached.
+Only score areas where questions were actually asked and the candidate had a chance to respond.
+
+overall_score should be the weighted average of ONLY the scored (covered) areas.
+product_sense and execution are weighted 1.5x when covered.
+
+Scoring rubric (for covered areas only):
 1 = Very weak — no relevant evidence, off-topic, or fundamentally flawed approach
 2 = Below expectations — vague, generic, lacks specifics or real examples
 3 = Meets expectations — reasonable answers with some depth
@@ -940,7 +951,6 @@ Scoring rubric:
 
 Base scores on the quality_scores data and evidence map — not impressions.
 Quote the candidate's actual words when citing evidence in strengths and areas_for_improvement.
-overall_score is the weighted average (product_sense and execution weighted 1.5x).
 
 If a resume is provided, factor the candidate's experience level into your assessment.
 A senior PM with 8 years should be held to a higher bar than a first-time PM. Reference
@@ -991,12 +1001,15 @@ async def generate_feedback_report(session: InterviewSession) -> dict:
 
         competency_scores = {}
         for area in COMPETENCY_AREAS:
+            if session.questions_per_area.get(area, 0) == 0:
+                competency_scores[area] = {"score": None, "summary": "Not covered — no questions were asked in this area during the interview."}
+                continue
             vals = area_scores.get(area, [3])
             avg = sum(vals) / len(vals)
             competency_scores[area] = {"score": round(avg, 1), "summary": "Based on averaged scores."}
 
-        all_scores = [v["score"] for v in competency_scores.values()]
-        overall = sum(all_scores) / len(all_scores) if all_scores else 3.0
+        scored = [v["score"] for v in competency_scores.values() if v["score"] is not None]
+        overall = sum(scored) / len(scored) if scored else 0
 
         return {
             "overall_score": round(overall, 1),
