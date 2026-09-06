@@ -303,12 +303,13 @@ async function pollVoiceStatus() {
     lastTranscriptSnapshot = transcript;
 
     if (data.interview_ended) {
-      // Flush all remaining messages to chat on interview end
       flushTranscriptToChat(transcript, persona);
       sessionInfo.textContent = 'Interview completed';
       if (data.feedback_report) {
         renderReport(data.feedback_report);
         await stopVoiceInterview(false);
+      } else {
+        addMessage('Generating your feedback report...', 'notice');
       }
     }
   } catch (_) {}
@@ -371,8 +372,21 @@ const endCallButton = document.getElementById('end-call-button');
 if (endCallButton) {
   endCallButton.addEventListener('click', async () => {
     if (voiceMode) {
-      addMessage('Session ended. Your temporary data was cleared.', 'notice');
-      await stopVoiceInterview(true);
+      addMessage('Generating your feedback report...', 'notice');
+      const savedSessionId = sessionId;
+      await stopVoiceInterview(false);
+      if (savedSessionId) {
+        try {
+          const data = await api(`/voice/sessions/${savedSessionId}/stop`, { method: 'POST' });
+          if (data.feedback_report) {
+            renderReport(data.feedback_report);
+          } else {
+            addMessage('Interview ended. No report was generated (too few responses).', 'notice');
+          }
+        } catch (_) {
+          addMessage('Interview ended. Could not generate report.', 'notice');
+        }
+      }
     }
   });
 }

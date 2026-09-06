@@ -109,6 +109,8 @@ async def start_voice_interview(session_id: str):
 
 @voice_router.post("/sessions/{session_id}/stop")
 async def stop_voice_interview(session_id: str):
+    from main import sessions, generate_feedback_report
+
     vs = voice_sessions.get(session_id)
     if not vs:
         raise HTTPException(status_code=404, detail="No active voice session found.")
@@ -117,14 +119,18 @@ async def stop_voice_interview(session_id: str):
         await stop_agent(vs.agent_id)
         vs.agent_id = None
 
-    voice_sessions.pop(session_id, None)
-
-    from main import sessions
     session = sessions.get(session_id)
+    report = None
     if session:
         session.interview_active = False
+        try:
+            report = await generate_feedback_report(session)
+        except Exception as e:
+            print(f"[STOP] Report generation failed: {e}")
 
-    return {"message": "Voice interview stopped."}
+    voice_sessions.pop(session_id, None)
+
+    return {"message": "Voice interview stopped.", "feedback_report": report}
 
 
 @voice_router.post("/sessions/{session_id}/ready")

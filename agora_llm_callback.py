@@ -280,7 +280,7 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
             session.conversation_history.append({"role": "assistant", "content": closing})
             session.interview_active = False
             vs.interview_ended = True
-            asyncio.create_task(_stop_agent_delayed(vs))
+            asyncio.create_task(_handle_wrap_up(session_id, session, vs))
             return _sse_response(closing)
     else:
         session.off_topic_attempts = 0
