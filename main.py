@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from groq import AsyncGroq, Groq, RateLimitError
 from pydantic import BaseModel
@@ -1327,6 +1327,18 @@ async def answer_interview(session_id: str, request: AnswerRequest):
         "action": action,
         "evidence_map": session.evidence_map,
     }
+
+
+@app.patch("/sessions/{session_id}")
+async def update_session(session_id: str, request: Request):
+    """Update session with role title and job description before starting."""
+    session = get_session(session_id)
+    body = await request.json()
+    if body.get("job_description"):
+        session.job_description = str(body["job_description"]).strip()[:8000]
+    if body.get("role_title"):
+        session.role_title = str(body["role_title"]).strip()[:200]
+    return {"message": "Session updated."}
 
 
 @app.delete("/sessions/{session_id}")

@@ -191,10 +191,6 @@
       <form id="create-form">
         <label for="identifier">Email or 10-digit phone number</label>
         <input id="identifier" required autocomplete="email" placeholder="name@example.com or 9876543210">
-        <label for="role-title">Role title <span style="color:#6b7d8f;font-weight:400">(optional)</span></label>
-        <input id="role-title" placeholder="e.g. Senior Product Manager">
-        <label for="job-desc">Job description <span style="color:#6b7d8f;font-weight:400">(optional)</span></label>
-        <textarea id="job-desc" rows="4" placeholder="Paste a job description to practice for a specific role..." style="width:100%;border:1px solid #3b4c61;background:#111923;border-radius:10px;color:inherit;padding:14px;font:inherit;resize:vertical;box-sizing:border-box;"></textarea>
         <button class="primary" type="submit">Start private interview</button>
         <div id="setup-error" class="error" role="alert"></div>
       </form>
@@ -225,7 +221,11 @@
           <button id="upload-button" type="button">Upload resume</button>
         </div>
         <span id="resume-status" class="resume-status"></span>
-        <button id="start-voice-button" class="btn-voice-primary" type="button">Start voice interview</button>
+        <label for="role-title" style="font-size:.85rem;font-weight:600;margin-top:12px;display:block;">Role title <span style="color:#6b7d8f;font-weight:400">(optional)</span></label>
+        <input id="role-title" placeholder="e.g. Senior Product Manager" style="width:100%;border:1px solid #3b4c61;background:#111923;border-radius:10px;color:inherit;padding:12px 14px;font:inherit;box-sizing:border-box;margin-top:4px;">
+        <label for="job-desc" style="font-size:.85rem;font-weight:600;margin-top:10px;display:block;">Job description <span style="color:#6b7d8f;font-weight:400">(optional)</span></label>
+        <textarea id="job-desc" rows="3" placeholder="Paste a job description to practice for a specific role..." style="width:100%;border:1px solid #3b4c61;background:#111923;border-radius:10px;color:inherit;padding:12px 14px;font:inherit;resize:vertical;box-sizing:border-box;margin-top:4px;"></textarea>
+        <button id="start-voice-button" class="btn-voice-primary" type="button" style="margin-top:14px;">Start voice interview</button>
         <button id="start-button" class="btn-text-secondary" type="button">Start text interview</button>
       </div>
     </section>
@@ -539,20 +539,13 @@
       e.preventDefault();
       document.getElementById('setup-error').textContent = '';
       const id = document.getElementById('identifier').value.trim();
-      const jobDesc = document.getElementById('job-desc').value.trim();
-      const roleTitle = document.getElementById('role-title').value.trim();
       const body = {identifier: id};
-      if (jobDesc) body.job_description = jobDesc;
-      if (roleTitle) body.role_title = roleTitle;
       try {
         const d = await api('/sessions', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         sessionId = d.session_id;
         sessionOpen = true;
         setup.style.display = 'none';
         app.classList.add('active');
-        if (d.role_title) {
-          document.querySelector('.lobby .subtitle').textContent = `Practicing for: ${d.role_title}`;
-        }
         addMessage('Session ready. Upload a resume or start the interview.', 'notice');
         setInterviewActive(false);
       } catch (err) { document.getElementById('setup-error').textContent = err.message; }
@@ -592,12 +585,24 @@
       } catch (err) { intResumeStatus.textContent = err.message; intUploadBtn.disabled = false; }
     });
 
+    async function sendRoleAndJD() {
+      const roleTitle = document.getElementById('role-title').value.trim();
+      const jobDesc = document.getElementById('job-desc').value.trim();
+      if (roleTitle || jobDesc) {
+        const body = {};
+        if (roleTitle) body.role_title = roleTitle;
+        if (jobDesc) body.job_description = jobDesc;
+        await api(`/sessions/${sessionId}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      }
+    }
+
     // Start text interview
     startButton.addEventListener('click', async () => {
       startButton.disabled = true;
       document.getElementById('start-voice-button').disabled = true;
       sessionInfo.textContent = 'Maya is preparing...';
       try {
+        await sendRoleAndJD();
         const d = await api(`/sessions/${sessionId}/start-interview`, {method:'POST'});
         addMessage(d.question, 'assistant', 'maya');
         setInterviewActive(true);

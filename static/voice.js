@@ -155,6 +155,7 @@ async function startVoiceInterview() {
   sessionInfo.textContent = 'Connecting to voice interview...';
 
   try {
+    if (typeof sendRoleAndJD === 'function') await sendRoleAndJD();
     const data = await api(`/voice/sessions/${sessionId}/start`, { method: 'POST' });
 
     voiceClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
