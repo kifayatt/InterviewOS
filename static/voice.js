@@ -3,8 +3,8 @@
 let voiceClient = null;
 let localAudioTrack = null;
 let voicePollingInterval = null;
-let lastTranscriptLength = 0;
 let displayedMessages = new Set();
+let lastTranscriptSnapshot = [];
 let voiceMode = false;
 let isMuted = false;
 
@@ -41,6 +41,56 @@ function clearAllThinking() {
   clearThinking('maya');
   clearThinking('raj');
   clearThinking('candidate');
+}
+
+function flushTranscriptToChat(transcript, persona) {
+  for (let i = 0; i < transcript.length; i++) {
+    const msg = transcript[i];
+    const content = msg.content;
+
+    // Skip if next message has the same role (this is a superseded fragment)
+    if (i < transcript.length - 1 && transcript[i + 1].role === msg.role) continue;
+
+    const key = msg.role + '|' + content;
+    if (displayedMessages.has(key)) continue;
+    displayedMessages.add(key);
+
+    if (msg.role === 'assistant' && content.startsWith('{')) {
+      try {
+        const ctrl = JSON.parse(content);
+        if (ctrl.type === 'think_time') {
+          showThinkTimer(ctrl.duration_seconds);
+          addMessage('Taking ' + formatThinkTime(ctrl.duration_seconds) + ' to think...', 'notice');
+          continue;
+        }
+      } catch (_) {}
+    }
+
+    if (msg.role === 'notice') {
+      addMessage(content, 'notice');
+      continue;
+    }
+
+    const role = msg.role === 'user' ? 'user' : 'assistant';
+    addMessage(content, role, role === 'assistant' ? persona : undefined);
+  }
+}
+
+function updateLiveBar(content, speakerRole, persona) {
+  const liveLabel = document.getElementById('live-label');
+  const bar = document.getElementById('live-transcription');
+  if (bar) bar.classList.add('active');
+  if (liveLabel) {
+    if (speakerRole === 'user') {
+      liveLabel.textContent = 'You';
+      liveLabel.className = 'live-label live-label-candidate';
+    } else {
+      const name = persona === 'raj' ? 'Raj' : 'Maya';
+      liveLabel.textContent = name;
+      liveLabel.className = 'live-label live-label-' + persona;
+    }
+  }
+  liveText.textContent = content.slice(0, 200) + (content.length > 200 ? '...' : '');
 }
 
 function showThinkTimer(durationSeconds) {
@@ -192,7 +242,8 @@ async function startVoiceInterview() {
     addMessage('Voice interview started. Speak into your microphone.', 'notice');
     startTimer();
 
-    lastTranscriptLength = 0;
+    displayedMessages.clear();
+    lastTranscriptSnapshot = [];
     voicePollingInterval = setInterval(pollVoiceStatus, 2000);
   } catch (error) {
     addMessage('Failed to start voice interview: ' + error.message, 'notice');
@@ -230,36 +281,35 @@ async function pollVoiceStatus() {
     }
 
     const transcript = data.transcript || [];
-    for (const msg of transcript) {
-      const content = msg.content;
-      const key = msg.role + '|' + content;
-      if (displayedMessages.has(key)) continue;
-      displayedMessages.add(key);
 
-      // Check for think_time control messages from callback
-      if (msg.role === 'assistant' && content.startsWith('{')) {
-        try {
-          const ctrl = JSON.parse(content);
-          if (ctrl.type === 'think_time') {
-            showThinkTimer(ctrl.duration_seconds);
-            addMessage('Taking ' + formatThinkTime(ctrl.duration_seconds) + ' to think...', 'notice');
-            continue;
-          }
-        } catch (_) {}
-      }
-
-      const role = msg.role === 'user' ? 'user' : 'assistant';
-      addMessage(content, role, role === 'assistant' ? persona : undefined);
-      liveText.textContent = content.slice(0, 120) + (content.length > 120 ? '...' : '');
+    // Find the cutoff: messages followed by a different role are finalized.
+    // Trailing messages of the same role as the last one stay in live bar only.
+    let trailingRole = transcript.length > 0 ? transcript[transcript.length - 1].role : null;
+    let cutoff = transcript.length;
+    for (let i = transcript.length - 1; i >= 0; i--) {
+      if (transcript[i].role === trailingRole) cutoff = i;
+      else break;
     }
 
+    // Commit finalized messages to chat (everything before cutoff)
+    flushTranscriptToChat(transcript.slice(0, cutoff), persona);
+
+    // Update live bar with the latest trailing message
+    if (transcript.length > 0) {
+      const last = transcript[transcript.length - 1];
+      updateLiveBar(last.content, last.role, persona);
+    }
+
+    lastTranscriptSnapshot = transcript;
+
     if (data.interview_ended) {
+      // Flush all remaining messages to chat on interview end
+      flushTranscriptToChat(transcript, persona);
       sessionInfo.textContent = 'Interview completed';
       if (data.feedback_report) {
         renderReport(data.feedback_report);
         await stopVoiceInterview(false);
       }
-      // Keep polling until report arrives — don't stop yet
     }
   } catch (_) {}
 }

@@ -57,7 +57,7 @@
     .participants { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 14px; justify-content: center; align-items: center; overflow-y: auto; }
 
     .participant { width: 100%; max-width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; transition: all .3s ease; }
-    .participant.speaking { border-color: var(--teal); border-width: 2px; padding: 13px 15px; }
+    .participant.speaking { border-color: var(--teal); border-width: 2px; padding: 13px 15px; box-shadow: 0 0 12px rgba(114, 224, 178, 0.25); }
     .participant.listening { opacity: .75; }
     .participant.idle { opacity: .5; }
     .participant .avatar { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; overflow: hidden; }
@@ -90,9 +90,13 @@
     .think-countdown { font-size: 1.1rem; font-weight: 700; color: var(--teal); font-variant-numeric: tabular-nums; }
     .btn-ready { padding: 6px 14px; font-size: .82rem; background: var(--teal); color: #082219; border-radius: 8px; }
 
-    .live-transcription { padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2); flex-shrink: 0; }
-    .live-label { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
-    .live-text { font-size: .85rem; color: var(--text-dim); font-style: italic; line-height: 1.45; min-height: 1.3em; }
+    .live-transcription { padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .live-transcription.active { background: #1a2535; border-top-color: var(--teal-dim); }
+    .live-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 5px; color: var(--text-muted); }
+    .live-label-maya { color: var(--teal); }
+    .live-label-raj { color: var(--purple); }
+    .live-label-candidate { color: var(--coral); }
+    .live-text { font-size: 1rem; color: var(--text); line-height: 1.5; min-height: 1.4em; }
 
     .controls { padding: 10px 20px; border-top: 1px solid var(--border); display: flex; justify-content: center; gap: 12px; flex-shrink: 0; }
     .ctrl-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); font-size: .85rem; position: relative; }
@@ -184,6 +188,10 @@
       <form id="create-form">
         <label for="identifier">Email or 10-digit phone number</label>
         <input id="identifier" required autocomplete="email" placeholder="name@example.com or 9876543210">
+        <label for="role-title">Role title <span style="color:#6b7d8f;font-weight:400">(optional)</span></label>
+        <input id="role-title" placeholder="e.g. Senior Product Manager">
+        <label for="job-desc">Job description <span style="color:#6b7d8f;font-weight:400">(optional)</span></label>
+        <textarea id="job-desc" rows="4" placeholder="Paste a job description to practice for a specific role..." style="width:100%;border:1px solid #3b4c61;background:#111923;border-radius:10px;color:inherit;padding:14px;font:inherit;resize:vertical;box-sizing:border-box;"></textarea>
         <button class="primary" type="submit">Start private interview</button>
         <div id="setup-error" class="error" role="alert"></div>
       </form>
@@ -228,7 +236,7 @@
           <div id="p-maya" class="participant idle">
             <div class="avatar">
               <svg viewBox="0 0 52 52" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="26" cy="26" r="26" fill="#1D9E75"/>
+                <circle cx="26" cy="26" r="26" fill="#22C88E"/>
                 <circle cx="26" cy="18" r="8.5" fill="#E1F5EE"/>
                 <ellipse cx="26" cy="43" rx="15" ry="13" fill="#E1F5EE"/>
                 <circle cx="22.5" cy="17" r="1.4" fill="#0F6E56"/>
@@ -251,7 +259,7 @@
           <div id="p-raj" class="participant idle">
             <div class="avatar">
               <svg viewBox="0 0 52 52" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="26" cy="26" r="26" fill="#534AB7"/>
+                <circle cx="26" cy="26" r="26" fill="#6C63D4"/>
                 <circle cx="26" cy="18" r="8.5" fill="#EEEDFE"/>
                 <ellipse cx="26" cy="43" rx="15" ry="13" fill="#EEEDFE"/>
                 <circle cx="22.5" cy="17" r="1.4" fill="#3C3489"/>
@@ -274,7 +282,7 @@
           <div id="p-candidate" class="participant idle" style="position:relative">
             <div class="avatar">
               <svg viewBox="0 0 52 52" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="26" cy="26" r="26" fill="#D85A30"/>
+                <circle cx="26" cy="26" r="26" fill="#E8703E"/>
                 <circle cx="26" cy="18" r="8.5" fill="#FAECE7"/>
                 <ellipse cx="26" cy="43" rx="15" ry="13" fill="#FAECE7"/>
                 <circle cx="22.5" cy="17" r="1.4" fill="#712B13"/>
@@ -307,7 +315,7 @@
 
         <!-- Live transcription -->
         <div id="live-transcription" class="live-transcription hidden">
-          <div class="live-label">Live transcription</div>
+          <div class="live-label" id="live-label">Live transcription</div>
           <div id="live-text" class="live-text"></div>
         </div>
 
@@ -367,6 +375,11 @@
     const timerEl = document.getElementById('timer');
     const liveTranscription = document.getElementById('live-transcription');
     const liveText = document.getElementById('live-text');
+
+    // Pre-fill from URL params (Chrome extension flow)
+    const _urlParams = new URLSearchParams(window.location.search);
+    if (_urlParams.get('jd')) document.getElementById('job-desc').value = _urlParams.get('jd');
+    if (_urlParams.get('title')) document.getElementById('role-title').value = _urlParams.get('title');
     const controls = document.getElementById('controls');
     const hideChatBtn = document.getElementById('hide-chat-btn');
     const showChatBtn = document.getElementById('show-chat-btn');
@@ -506,12 +519,20 @@
       e.preventDefault();
       document.getElementById('setup-error').textContent = '';
       const id = document.getElementById('identifier').value.trim();
+      const jobDesc = document.getElementById('job-desc').value.trim();
+      const roleTitle = document.getElementById('role-title').value.trim();
+      const body = {identifier: id};
+      if (jobDesc) body.job_description = jobDesc;
+      if (roleTitle) body.role_title = roleTitle;
       try {
-        const d = await api('/sessions', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({identifier:id}) });
+        const d = await api('/sessions', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         sessionId = d.session_id;
         sessionOpen = true;
         setup.style.display = 'none';
         app.classList.add('active');
+        if (d.role_title) {
+          document.querySelector('.lobby .subtitle').textContent = `Practicing for: ${d.role_title}`;
+        }
         addMessage('Session ready. Upload a resume or start the interview.', 'notice');
         setInterviewActive(false);
       } catch (err) { document.getElementById('setup-error').textContent = err.message; }

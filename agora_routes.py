@@ -34,6 +34,7 @@ async def start_voice_interview(session_id: str):
         sessions,
         get_session,
         build_maya_prompt,
+        build_scenario,
         empty_evidence_map,
         COMPETENCY_AREAS,
     )
@@ -72,7 +73,7 @@ async def start_voice_interview(session_id: str):
 
     # Build Maya's system prompt and generate a varied greeting
     has_resume = bool(session.resume_text)
-    maya_prompt = build_maya_prompt(session.resume_text, has_resume)
+    maya_prompt = build_maya_prompt(session.resume_text, has_resume, scenario=build_scenario(session))
 
     if session.candidate_name:
         greeting_text = random.choice(_GREETINGS_WITH_NAME).format(name=session.candidate_name)

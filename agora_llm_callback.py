@@ -92,6 +92,7 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
         get_session,
         build_maya_prompt,
         build_raj_prompt,
+        build_scenario,
         build_evidence_summary,
         extract_evidence_async,
         decide_next_action_async,
@@ -145,7 +146,7 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
                 "Stay professional and candidate-focused. No hypothetical or creative questions."
             )
             session.conversation_history = [
-                {"role": "system", "content": build_maya_prompt(session.resume_text, has_resume)},
+                {"role": "system", "content": build_maya_prompt(session.resume_text, has_resume, scenario=build_scenario(session))},
                 {"role": "user", "content": kickoff},
             ]
             raw = await _llm_call(session.conversation_history, temperature=0.7)
@@ -239,26 +240,32 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
         })
         return _sse_response(control)
 
-    # --- Fix 2: Merge rapid consecutive messages at conversation_history level ---
+    # --- Fix 2: Merge consecutive user messages (cumulative-aware) ---
     now = time.time()
     time_since_last = now - vs.last_transcript_time if vs.last_transcript_time else float("inf")
     vs.last_transcript_time = now
 
-    # --- Normal answer processing (mirrors main.py /answer endpoint) ---
-
     if not session.interview_active:
         return _sse_response("This interview session has ended. Thank you for your time.")
 
-    if time_since_last < MERGE_WINDOW_SECONDS and len(session.conversation_history) >= 2:
-        last_msg = session.conversation_history[-1]
+    def _merge_user_content(existing: str, new: str) -> str:
+        if new.startswith(existing):
+            return new
+        if existing.startswith(new):
+            return existing
+        return (existing + " " + new).strip()
+
+    last_msg = session.conversation_history[-1] if session.conversation_history else None
+
+    if last_msg and last_msg.get("role") == "assistant" and time_since_last < MERGE_WINDOW_SECONDS:
         prev_msg = session.conversation_history[-2] if len(session.conversation_history) >= 2 else None
-        if last_msg.get("role") == "assistant" and prev_msg and prev_msg.get("role") == "user":
-            prev_msg["content"] = (prev_msg["content"] + " " + transcript).strip()
+        if prev_msg and prev_msg.get("role") == "user":
+            prev_msg["content"] = _merge_user_content(prev_msg["content"], transcript)
             session.conversation_history.pop()
-        elif last_msg.get("role") == "user":
-            last_msg["content"] = (last_msg["content"] + " " + transcript).strip()
         else:
             session.conversation_history.append({"role": "user", "content": transcript})
+    elif last_msg and last_msg.get("role") == "user":
+        last_msg["content"] = _merge_user_content(last_msg["content"], transcript)
     else:
         session.conversation_history.append({"role": "user", "content": transcript})
 
@@ -291,10 +298,10 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
         # Swap back to original persona
         original_persona = vs.pre_swap_persona or "maya"
         if original_persona == "maya":
-            prompt = build_maya_prompt(session.resume_text, bool(session.resume_text))
+            prompt = build_maya_prompt(session.resume_text, bool(session.resume_text), scenario=build_scenario(session))
         else:
             summary = build_evidence_summary(session.evidence_map)
-            prompt = build_raj_prompt(session.resume_text, summary)
+            prompt = build_raj_prompt(session.resume_text, summary, scenario=build_scenario(session))
 
         asyncio.create_task(swap_back_from_cameo(session_id, prompt))
         return _sse_response(take_back)
@@ -376,7 +383,7 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
 
         # Build Raj's system prompt with evidence summary
         summary = build_evidence_summary(session.evidence_map)
-        raj_prompt = build_raj_prompt(session.resume_text, summary)
+        raj_prompt = build_raj_prompt(session.resume_text, summary, scenario=build_scenario(session))
 
         # Update conversation history system prompt for Raj
         session.conversation_history[0]["content"] = raj_prompt
