@@ -32,6 +32,11 @@ async def start_voice_interview(session_id: str):
     if session_id in voice_sessions:
         raise HTTPException(status_code=409, detail="A voice session is already active.")
 
+    if session.demo_mode and not session.job_description and not session.demo_scenario:
+        import random
+        from main import DEMO_SCENARIOS
+        session.demo_scenario = random.choice(DEMO_SCENARIOS)
+
     if not AGORA_APP_ID:
         raise HTTPException(status_code=500, detail="Agora credentials not configured. Set AGORA_APP_ID in .env.")
 

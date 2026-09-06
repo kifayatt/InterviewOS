@@ -50,7 +50,7 @@ def _build_agent_payload(
                 "vendor": "deepgram",
                 "params": {
                     "language": "en-US",
-                    "silence_duration_ms": 3000,
+                    "silence_duration_ms": 4500,
                 },
             },
             "llm": {

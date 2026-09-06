@@ -220,15 +220,8 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
         vs.think_start = time.time()
         vs.think_deadline = vs.think_start + think_seconds
         vs.think_requested_count = 1
-        mins = think_seconds // 60
-        secs = think_seconds % 60
-        if mins > 0 and secs > 0:
-            time_str = f"{mins} minute{'s' if mins > 1 else ''} and {secs} seconds"
-        elif mins > 0:
-            time_str = f"{mins} minute{'s' if mins > 1 else ''}"
-        else:
-            time_str = f"{secs} seconds"
-        message = f"Take your time — you've got {time_str}."
+        name_part = f" {session.candidate_name}" if session.candidate_name else ""
+        message = f"Sure{name_part}, take your time. Click Ready when you're set."
         control = json.dumps({
             "type": "think_time",
             "duration_seconds": think_seconds,
@@ -265,21 +258,32 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
     else:
         session.conversation_history.append({"role": "user", "content": transcript})
 
-    # Off-topic check
+    # Off-topic check (prompt injection safety net — general off-topic handled by orchestrator)
     if is_off_topic_message(session, transcript):
         session.off_topic_attempts += 1
         if session.off_topic_attempts >= 2:
             closing = (
-                "This interview session has ended because we need to stay focused on the "
-                "interview. Thank you for your time."
+                "I'm ending this interview due to unprofessional conduct. "
+                "Thank you for your time."
             )
             session.conversation_history.append({"role": "assistant", "content": closing})
             session.interview_active = False
             vs.interview_ended = True
             asyncio.create_task(_handle_wrap_up(session_id, session, vs))
             return _sse_response(closing)
+        warning = (
+            "I notice we're going off topic. Let's stay on course and "
+            "focus on the interview. Could you answer the question I asked?"
+        )
+        session.conversation_history.append({"role": "assistant", "content": warning})
+        return _sse_response(warning)
     else:
         session.off_topic_attempts = 0
+
+    # Debounce: if the candidate is still speaking (callbacks arriving rapidly), don't
+    # generate a real response — just acknowledge so the agent stays quiet.
+    if time_since_last < MERGE_WINDOW_SECONDS:
+        return _sse_response("Mm-hm.")
 
     session.turn_count += 1
 

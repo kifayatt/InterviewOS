@@ -225,7 +225,11 @@
         <input id="role-title" placeholder="e.g. Senior Product Manager" style="width:100%;border:1px solid #3b4c61;background:#111923;border-radius:10px;color:inherit;padding:12px 14px;font:inherit;box-sizing:border-box;margin-top:4px;">
         <label for="job-desc" style="font-size:.85rem;font-weight:600;margin-top:10px;display:block;">Job description <span style="color:#6b7d8f;font-weight:400">(optional)</span></label>
         <textarea id="job-desc" rows="3" placeholder="Paste a job description to practice for a specific role..." style="width:100%;border:1px solid #3b4c61;background:#111923;border-radius:10px;color:inherit;padding:12px 14px;font:inherit;resize:vertical;box-sizing:border-box;margin-top:4px;"></textarea>
-        <button id="start-voice-button" class="btn-voice-primary" type="button" style="margin-top:14px;">Start voice interview</button>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:.85rem;cursor:pointer;">
+          <input type="checkbox" id="demo-mode" style="accent-color:#00c896;width:16px;height:16px;cursor:pointer;">
+          Demo mode <span style="color:#6b7d8f;">(short interview, ~5 min)</span>
+        </label>
+        <button id="start-voice-button" class="btn-voice-primary" type="button" style="margin-top:10px;">Start voice interview</button>
         <button id="start-button" class="btn-text-secondary" type="button">Start text interview</button>
       </div>
     </section>
@@ -492,10 +496,11 @@
         <div class="report-section"><h4>Strengths</h4><ul>${(report.strengths||[]).map(s=>`<li>${s}</li>`).join('')}</ul></div>
         <div class="report-section"><h4>Areas for improvement</h4><ul>${(report.areas_for_improvement||[]).map(s=>`<li>${s}</li>`).join('')}</ul></div>
         ${report.recommendation_rationale ? `<div class="report-rationale">${report.recommendation_rationale}</div>` : ''}
-        <button class="btn-close-report" onclick="closeReport(this)">Close Report &amp; Clear Data</button>
+        <button class="btn-close-report" onclick="closeReport(this)">Close Report</button>
       `;
       messages.append(card);
       messages.scrollTop = messages.scrollHeight;
+      endButton.disabled = true;
     }
 
     async function closeReport(btn) {
@@ -588,10 +593,12 @@
     async function sendRoleAndJD() {
       const roleTitle = document.getElementById('role-title').value.trim();
       const jobDesc = document.getElementById('job-desc').value.trim();
-      if (roleTitle || jobDesc) {
+      const demoMode = document.getElementById('demo-mode')?.checked || false;
+      if (roleTitle || jobDesc || demoMode) {
         const body = {};
         if (roleTitle) body.role_title = roleTitle;
         if (jobDesc) body.job_description = jobDesc;
+        if (demoMode) body.demo_mode = true;
         await api(`/sessions/${sessionId}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
       }
     }
