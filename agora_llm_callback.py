@@ -417,7 +417,7 @@ async def _stop_agent_delayed(vs: "VoiceSessionState") -> None:
 
 
 async def _handle_wrap_up(session_id: str, session, vs) -> None:
-    from main import generate_feedback_report
+    from main import generate_feedback_report, _auto_cleanup
     from agora_agent import stop_agent
 
     await asyncio.sleep(5)
@@ -427,3 +427,5 @@ async def _handle_wrap_up(session_id: str, session, vs) -> None:
 
     report = await generate_feedback_report(session)
     vs.feedback_report = report
+
+    asyncio.create_task(_auto_cleanup(session_id))

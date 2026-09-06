@@ -109,7 +109,8 @@ async def start_voice_interview(session_id: str):
 
 @voice_router.post("/sessions/{session_id}/stop")
 async def stop_voice_interview(session_id: str):
-    from main import sessions, generate_feedback_report
+    import asyncio
+    from main import sessions, generate_feedback_report, _auto_cleanup
 
     vs = voice_sessions.get(session_id)
     if not vs:
@@ -129,6 +130,8 @@ async def stop_voice_interview(session_id: str):
             print(f"[STOP] Report generation failed: {e}")
 
     voice_sessions.pop(session_id, None)
+
+    asyncio.create_task(_auto_cleanup(session_id))
 
     return {"message": "Voice interview stopped.", "feedback_report": report}
 

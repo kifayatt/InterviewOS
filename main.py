@@ -1338,6 +1338,26 @@ def end_session(session_id: str):
     return {"message": "Interview session ended and temporary data was cleared."}
 
 
+@app.post("/sessions/{session_id}/cleanup")
+async def cleanup_session(session_id: str):
+    """Beacon endpoint for tab close — cleans up session data."""
+    session = sessions.get(session_id)
+    if session:
+        with session.lock:
+            remove_session(session_id, session)
+    return {"ok": True}
+
+
+async def _auto_cleanup(session_id: str, delay: int = 600):
+    """Fallback: remove session data after delay if user never clicks Close Report."""
+    await asyncio.sleep(delay)
+    session = sessions.get(session_id)
+    if session and not session.interview_active:
+        with session.lock:
+            remove_session(session_id, session)
+        print(f"[AUTO-CLEANUP] Session {session_id[:12]} cleaned up after {delay}s timeout")
+
+
 # --- Agora voice mode routers (registered after all definitions to avoid circular imports) ---
 from agora_routes import voice_router
 from agora_llm_callback import llm_callback_router

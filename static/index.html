@@ -155,6 +155,9 @@
     .report-section ul { margin: 0; padding-left: 16px; }
     .report-section li { color: var(--text-dim); font-size: .82rem; line-height: 1.45; margin-bottom: 3px; }
     .report-rationale { color: var(--text-dim); font-size: .82rem; line-height: 1.45; margin-top: 6px; font-style: italic; }
+    .btn-close-report { display: block; margin: 14px auto 0; padding: 8px 24px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: .85rem; cursor: pointer; }
+    .btn-close-report:hover { opacity: .85; }
+    .btn-close-report:disabled { opacity: .5; cursor: default; }
     .score-low { color: #e36c6c; }
     .score-mid { color: #e3c96c; }
     .score-high { color: var(--teal); }
@@ -489,9 +492,22 @@
         <div class="report-section"><h4>Strengths</h4><ul>${(report.strengths||[]).map(s=>`<li>${s}</li>`).join('')}</ul></div>
         <div class="report-section"><h4>Areas for improvement</h4><ul>${(report.areas_for_improvement||[]).map(s=>`<li>${s}</li>`).join('')}</ul></div>
         ${report.recommendation_rationale ? `<div class="report-rationale">${report.recommendation_rationale}</div>` : ''}
+        <button class="btn-close-report" onclick="closeReport(this)">Close Report &amp; Clear Data</button>
       `;
       messages.append(card);
       messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function closeReport(btn) {
+      btn.disabled = true;
+      btn.textContent = 'Clearing...';
+      if (sessionId) {
+        try {
+          await api(`/sessions/${sessionId}`, {method:'DELETE'});
+        } catch (_) {}
+      }
+      sessionOpen = false;
+      addMessage('Session ended. Your data was cleared.', 'notice');
     }
 
     function setInterviewActive(active) {
@@ -640,13 +656,22 @@
       if (!sessionOpen) return;
       endButton.disabled = true;
       try {
-        if (typeof stopVoiceInterview === 'function' && voiceMode) await stopVoiceInterview(true);
-        else await api(`/sessions/${sessionId}`, {method:'DELETE'});
+        if (typeof stopVoiceInterview === 'function' && voiceMode) {
+          addMessage('Generating your feedback report...', 'notice');
+          const result = await stopVoiceInterview(true);
+          if (result && result.feedback_report) {
+            renderReport(result.feedback_report);
+          } else {
+            addMessage('Interview ended. Could not generate report.', 'notice');
+          }
+        } else {
+          await api(`/sessions/${sessionId}`, {method:'DELETE'});
+          addMessage('Session ended. Your data was cleared.', 'notice');
+        }
         sessionOpen = false;
         setInterviewActive(false);
         stopTimer();
         setAllIdle();
-        addMessage('Session ended. Your data was cleared.', 'notice');
       } catch (err) { addMessage(err.message, 'notice'); endButton.disabled = false; }
     });
 
@@ -664,6 +689,12 @@
       if (ctrl && e.key === 'm') { e.preventDefault(); if (typeof toggleMute === 'function') toggleMute(); }
       if (ctrl && e.key === 'e') { e.preventDefault(); endButton.click(); }
       if (ctrl && e.key === 'h') { e.preventDefault(); toggleChat(); }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (sessionId) {
+        navigator.sendBeacon(`/sessions/${sessionId}/cleanup`);
+      }
     });
   </script>
   <script src="/static/voice.js"></script>

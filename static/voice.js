@@ -330,18 +330,19 @@ async function stopVoiceInterview(callApi = true) {
     await voiceClient.leave().catch(() => {});
     voiceClient = null;
   }
+  let result = null;
   if (callApi && sessionId) {
     try {
-      await api(`/voice/sessions/${sessionId}/stop`, { method: 'POST' });
+      result = await api(`/voice/sessions/${sessionId}/stop`, { method: 'POST' });
     } catch (_) {}
   }
   controls.classList.add('hidden');
   liveTranscription.classList.add('hidden');
-  sessionOpen = false;
   stopTimer();
   setInterviewActive(false);
   setAllIdle();
   clearAllThinking();
+  return result;
 }
 
 function toggleMute() {
@@ -373,19 +374,11 @@ if (endCallButton) {
   endCallButton.addEventListener('click', async () => {
     if (voiceMode) {
       addMessage('Generating your feedback report...', 'notice');
-      const savedSessionId = sessionId;
-      await stopVoiceInterview(false);
-      if (savedSessionId) {
-        try {
-          const data = await api(`/voice/sessions/${savedSessionId}/stop`, { method: 'POST' });
-          if (data.feedback_report) {
-            renderReport(data.feedback_report);
-          } else {
-            addMessage('Interview ended. No report was generated (too few responses).', 'notice');
-          }
-        } catch (_) {
-          addMessage('Interview ended. Could not generate report.', 'notice');
-        }
+      const result = await stopVoiceInterview(true);
+      if (result && result.feedback_report) {
+        renderReport(result.feedback_report);
+      } else {
+        addMessage('Interview ended. Could not generate report.', 'notice');
       }
     }
   });
