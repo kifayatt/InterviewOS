@@ -21,7 +21,17 @@ app = FastAPI()
 STATIC_DIR = Path(__file__).parent / "static"
 
 load_dotenv()
-MODEL_NAME = "openai/gpt-oss-20b"
+MODEL_POOL = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+_current_model_index = 0
+
+
+class AllModelsExhaustedError(Exception):
+    """Raised when every model in MODEL_POOL has hit its daily rate limit."""
+    pass
+
+
+def _get_model() -> str:
+    return MODEL_POOL[_current_model_index]
 
 api_key = os.getenv("GROQ_API_KEY")
 if not api_key:
@@ -32,19 +42,29 @@ async_client = AsyncGroq(api_key=api_key)
 
 
 async def _llm_call(messages: list, temperature: float = 0.3) -> str:
-    """Async LLM call with 8s timeout and retry on rate-limit."""
-    for attempt in range(2):
+    """Async LLM call with model fallback on rate-limit exhaustion."""
+    global _current_model_index
+    models_tried = 0
+    while models_tried < len(MODEL_POOL):
+        model = _get_model()
         try:
             response = await asyncio.wait_for(
                 async_client.chat.completions.create(
-                    model=MODEL_NAME, temperature=temperature, messages=messages,
+                    model=model, temperature=temperature, messages=messages,
                 ),
                 timeout=20.0,
             )
             return (response.choices[0].message.content or "").strip()
         except RateLimitError:
-            if attempt < 2:
-                await asyncio.sleep(3.0 * (attempt + 1))
+            next_idx = _current_model_index + 1
+            if next_idx < len(MODEL_POOL):
+                _current_model_index = next_idx
+                print(f"[MODEL SWITCH] {model} rate-limited → switching to {_get_model()}")
+                models_tried += 1
+            else:
+                _current_model_index = next_idx
+                print(f"[MODEL EXHAUSTED] All models rate-limited")
+                raise AllModelsExhaustedError("All models have hit their daily rate limit")
         except Exception as e:
             print(f"[LLM CALL ERROR] {type(e).__name__}: {e}")
             break
@@ -478,7 +498,7 @@ def extract_evidence(session: InterviewSession, candidate_answer: str) -> None:
     )
 
     response = client.chat.completions.create(
-        model=MODEL_NAME,
+        model=_get_model(),
         temperature=0,
         messages=[
             {"role": "system", "content": EVIDENCE_EXTRACTOR_PROMPT},
@@ -712,7 +732,7 @@ def decide_next_action(session: InterviewSession) -> dict:
     messages, maya_areas, raj_areas = _build_orchestrator_context(session)
 
     response = client.chat.completions.create(
-        model=MODEL_NAME,
+        model=_get_model(),
         temperature=0.3,
         messages=messages,
     )

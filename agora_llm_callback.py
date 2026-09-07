@@ -10,14 +10,19 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from agora_config import voice_sessions
+from main import AllModelsExhaustedError
 
 llm_callback_router = APIRouter()
 
 MERGE_WINDOW_SECONDS = 2.0
 
+WORD_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "a couple": 2}
+
 THINK_PATTERN = re.compile(
-    r"(?:give me|let me (?:think|have)|need|can i (?:have|get)|i need)\s*"
-    r"(?:(?:a |like )?(\d+)\s*(?:min(?:ute)?s?|sec(?:ond)?s?)|a (?:minute|moment|second))",
+    r"(?:give me|let me (?:think|have|take)|need|can i (?:have|get|take)|i need|"
+    r"(?:i )?(?:would like to |want to )?take)\s*"
+    r"(?:(?:a |like )?(\d+|one|two|three|four|five|a couple)\s*"
+    r"(?:min(?:ute)?s?|sec(?:ond)?s?)|a (?:minute|moment|second))",
     re.IGNORECASE,
 )
 
@@ -66,11 +71,12 @@ def _parse_think_duration(transcript: str) -> int | None:
     m = THINK_PATTERN.search(transcript)
     if not m:
         lower = transcript.lower().strip()
-        if any(p in lower for p in ("let me think", "give me a moment", "need a moment", "one moment", "hold on")):
+        if any(p in lower for p in ("let me think", "give me a moment", "need a moment", "one moment", "hold on", "take a moment")):
             return 60
         return None
     if m.group(1):
-        num = int(m.group(1))
+        raw = m.group(1).lower()
+        num = WORD_NUMBERS.get(raw) or int(raw)
         if "sec" in m.group(0).lower():
             return min(num, 180)
         return min(num * 60, 180)
@@ -320,6 +326,14 @@ async def _agora_llm_callback_inner(session_id: str, request: Request):
     try:
         await extract_evidence_async(session, transcript)
         decision = await decide_next_action_async(session)
+    except AllModelsExhaustedError:
+        print(f"[LLM CALLBACK] All models exhausted — ending interview")
+        limit_msg = "Our AI service has reached its daily limit. Please try again tomorrow."
+        session.conversation_history.append({"role": "assistant", "content": limit_msg})
+        session.interview_active = False
+        vs.interview_ended = True
+        asyncio.create_task(_handle_wrap_up(session_id, session, vs))
+        return _sse_response(limit_msg)
     except Exception as e:
         print(f"[LLM CALLBACK ERROR] Evidence/orchestration failed: {e}")
         fallback = "Could you tell me more about that?"
